@@ -1,114 +1,113 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-燃料电池汽车产业情报追踪
-全球范围搜索政策/事件 → AI 摘要 → 推送飞书群
-
-搜索引擎: Bing Web Search API (Azure 免费层 1000次/月)
-          或 SerpAPI (Google, 100次/月免费)
+燃料电池汽车产业情报日报
+基于 Google News RSS（免费，无需 API Key）
+全球搜索 → 自动分类 → 信源标注 → 飞书推送
 """
 
 import json, os, urllib.request, urllib.parse
+import xml.etree.ElementTree as ET
 import hmac, hashlib, base64, time as time_module
 from datetime import datetime, timedelta
 
-# ── 配置 ──────────────────────────────────────────
-WEBHOOK_URL    = os.environ["FEISHU_WEBHOOK_URL"]
-FEISHU_SECRET  = os.environ["FEISHU_SECRET"]
-SEARCH_ENGINE  = os.environ.get("SEARCH_ENGINE", "bing")  # bing | serpapi
-BING_API_KEY   = os.environ.get("BING_API_KEY", "")
-SERPAPI_KEY    = os.environ.get("SERPAPI_KEY", "")
+# ── 配置 ────────────────────────────────────────────
+WEBHOOK_URL   = os.environ["FEISHU_WEBHOOK_URL"]
+FEISHU_SECRET = os.environ["FEISHU_SECRET"]
 
-# 搜索查询 — 燃料电池汽车相关政策 & 重大事件
+# 搜索查询 — 英文全球 + 中文国内
 QUERIES = [
-    "fuel cell vehicle policy regulation 2025 2026",
-    "hydrogen fuel cell car government incentive subsidy",
-    "燃料电池汽车 政策 补贴 2025 2026",
-    "fuel cell electric vehicle FCEV industry news",
-    "hydrogen economy national strategy fuel cell",
+    ("燃料電気自動車+水素+政策+補助金",     "ja-JP",  "JP"),   # 日本
+    ("fuel+cell+vehicle+policy+hydrogen",    "en-US",  "US"),   # 全球英文
+    ("hydrogen+fuel+cell+FCEV+regulation",   "en-GB",  "GB"),   # 欧洲视角
+    ("Brennstoffzelle+Fahrzeug+Politik",     "de-DE",  "DE"),   # 德国（欧洲氢能中心）
+    ("pila+combustible+vehículo+hidrógeno",  "es-ES",  "ES"),   # 西班牙/拉美
+    ("pile+combustible+véhicule+hydrogène",  "fr-FR",  "FR"),   # 法国
+]
+CN_QUERIES = [
+    ("燃料电池汽车+政策+氢能+产业+补贴",          "zh-CN", "CN"),
+    ("氢能+燃料电池+示范城市群+政策",              "zh-CN", "CN"),
 ]
 
-MAX_RESULTS = 15  # 总结果数上限
-# ──────────────────────────────────────────────────
+MAX_RESULTS = 20
+# ────────────────────────────────────────────────────
 
 
-def search_bing(query, count=10):
-    """Bing Web Search API v7"""
-    url = "https://api.bing.microsoft.com/v7.0/search"
-    params = urllib.parse.urlencode({"q": query, "count": count, "mkt": "en-US", "freshness": "Month"})
-    req = urllib.request.Request(
-        f"{url}?{params}",
-        headers={"Ocp-Apim-Subscription-Key": BING_API_KEY},
+def search_google_news(query, hl, gl, max_results=50):
+    """免费 Google News RSS 搜索"""
+    ceid_map = {
+        "CN": "CN:zh-Hans", "US": "US:en", "GB": "GB:en",
+        "JP": "JP:ja", "DE": "DE:de", "FR": "FR:fr", "ES": "ES:es",
+    }
+    ceid = ceid_map.get(gl, f"{gl}:{hl.split('-')[0]}")
+    rss_url = (
+        f"https://news.google.com/rss/search?"
+        f"q={urllib.parse.quote(query)}&hl={hl}&gl={gl}&ceid={ceid}"
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode())
-    results = []
-    for item in data.get("webPages", {}).get("value", []):
-        results.append({
-            "title": item["name"],
-            "url": item["url"],
-            "snippet": item.get("snippet", ""),
-            "source": "Bing",
-        })
-    return results
+    req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        xml_data = resp.read().decode("utf-8")
 
-
-def search_serpapi(query, count=10):
-    """SerpAPI — Google Search"""
-    url = "https://serpapi.com/search"
-    params = urllib.parse.urlencode({
-        "q": query, "num": count, "api_key": SERPAPI_KEY,
-        "engine": "google", "hl": "en", "gl": "us",
-        "tbs": "qdr:m",  # past month
-    })
-    with urllib.request.urlopen(f"{url}?{params}", timeout=15) as resp:
-        data = json.loads(resp.read().decode())
+    root = ET.fromstring(xml_data)
     results = []
-    for item in data.get("organic_results", []):
+    for item in root.findall(".//item"):
+        title_el = item.find("title")
+        link_el = item.find("link")
+        source_el = item.find("source")
+        pubdate_el = item.find("pubDate")
+
+        title = title_el.text if title_el is not None else ""
+        link = link_el.text if link_el is not None else ""
+        source = source_el.text if source_el is not None else "Unknown"
+        pubdate = pubdate_el.text if pubdate_el is not None else ""
+
+        # 过滤无用内容
+        skip_words = ["stock", "share price", "股", "advertisement", "sponsored"]
+        if any(w in title.lower() for w in skip_words):
+            continue
+
         results.append({
-            "title": item.get("title", ""),
-            "url": item.get("link", ""),
-            "snippet": item.get("snippet", ""),
-            "source": "Google",
+            "title": title.strip(),
+            "url": link,
+            "source": source.strip(),
+            "date": pubdate,
+            "region": gl,
         })
+        if len(results) >= max_results:
+            break
     return results
 
 
 def search_all():
-    """执行全部查询，去重，返回汇总结果"""
-    search_func = search_bing if SEARCH_ENGINE == "bing" else search_serpapi
-    seen_urls = set()
+    """执行全部查询并合并去重"""
+    seen = set()
     all_results = []
 
-    for q in QUERIES:
+    for query, hl, gl in QUERIES + CN_QUERIES:
         try:
-            results = search_func(q, count=8)
+            results = search_google_news(query, hl, gl)
+            print(f"  [{gl}] {query[:40]}... → {len(results)} results")
             for r in results:
-                if r["url"] not in seen_urls:
-                    seen_urls.add(r["url"])
+                key = r["title"][:80]  # 用标题去重
+                if key not in seen:
+                    seen.add(key)
                     all_results.append(r)
         except Exception as e:
-            print(f"[WARN] Search failed for '{q[:40]}...': {e}")
+            print(f"  [WARN] {gl} failed: {e}")
 
-    # 按相关性排序（snippet 长度作为简易相关度指标）
-    all_results.sort(key=lambda x: len(x["snippet"]), reverse=True)
+    # 按日期排序（新的在前）
+    def parse_date(r):
+        try:
+            return datetime.strptime(r["date"], "%a, %d %b %Y %H:%M:%S %Z")
+        except Exception:
+            return datetime.min
+    all_results.sort(key=parse_date, reverse=True)
+
     return all_results[:MAX_RESULTS]
 
 
-def generate_summary(results):
-    """生成 AI 可读的结构化摘要文档"""
-    today = datetime.now().strftime("%Y-%m-%d")
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-    doc_lines = [
-        f"# 🔋 燃料电池汽车产业情报日报",
-        f"**日期**: {today}  |  **信源数**: {len(results)}  |  **搜索范围**: 全球",
-        "",
-        "---",
-        "",
-    ]
-
-    # 按主题分类
+def classify(results):
+    """自动分类"""
     categories = {
         "政策法规": [],
         "产业动态": [],
@@ -117,20 +116,24 @@ def generate_summary(results):
         "国际合作": [],
     }
 
-    policy_kw = ["policy", "regulation", " subsidy", "incentive", "government", "ban", "mandate",
-                 "政策", "补贴", "法规", "标准", "政府"]
-    tech_kw = ["technology", "breakthrough", "efficiency", "stack", "membrane", "catalyst",
-               "技术", "突破", "效率"]
-    market_kw = ["investment", "funding", "market", "stock", "IPO", "acquisition", "partnership",
-                 "投资", "市场", "融资", "合作"]
-    international_kw = ["EU", "Europe", "China", "Japan", "Korea", "Germany", "US", "California",
-                        "欧盟", "中国", "日本", "韩国", "德国", "美国"]
+    policy_kw = ["policy", "regulation", "subsidy", "incentive", "government",
+                 "ban", "mandate", "law", "bill", "standard", "target",
+                 "政策", "补贴", "法规", "标准", "政府", "国家", "目标", "规划", "示范"]
+    tech_kw = ["technology", "breakthrough", "stack", "membrane", "catalyst",
+               "efficiency", "durability", "performance",
+               "技术", "突破", "效率", "催化剂", "膜", "电堆", "续航"]
+    market_kw = ["investment", "funding", "market", "IPO", "stock", "acquisition",
+                 "partnership", "revenue", "sales", "deployment",
+                 "投资", "融资", "市场", "上市", "销售", "交付", "量产"]
+    intl_kw = ["EU", "Europe", "China", "Japan", "Korea", "Germany", "US", "California",
+               "agreement", "cooperation", "trade",
+               "欧盟", "日本", "韩国", "德国", "美国", "合作", "国际", "全球"]
 
     for r in results:
-        text = (r["title"] + " " + r["snippet"]).lower()
+        text = (r["title"] + " " + r["source"]).lower()
         if any(kw.lower() in text for kw in policy_kw):
             categories["政策法规"].append(r)
-        elif any(kw.lower() in text for kw in international_kw):
+        elif any(kw.lower() in text for kw in intl_kw):
             categories["国际合作"].append(r)
         elif any(kw.lower() in text for kw in tech_kw):
             categories["技术创新"].append(r)
@@ -139,40 +142,73 @@ def generate_summary(results):
         else:
             categories["产业动态"].append(r)
 
-    for cat, items in categories.items():
-        if not items:
-            continue
-        doc_lines.append(f"## 📌 {cat}（{len(items)}条）")
-        doc_lines.append("")
-        for i, item in enumerate(items, 1):
-            doc_lines.append(f"### {i}. {item['title']}")
-            doc_lines.append(f"")
-            doc_lines.append(f"**摘要**: {item['snippet']}")
-            doc_lines.append(f"**信源**: [{item['url']}]({item['url']})")
-            doc_lines.append("")
-        doc_lines.append("---")
-        doc_lines.append("")
+    return {k: v for k, v in categories.items() if v}
 
-    doc_lines += [
-        "> ℹ️ 本报告由 AI 自动生成，基于全球公开信源搜索。",
-        "> 建议结合专业分析判断，不构成投资建议。",
-        f"> 生成时间: {today}",
+
+def generate_report(categories):
+    """生成 Markdown 报告"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    total = sum(len(v) for v in categories.values())
+
+    lines = [
+        f"# 🔋 燃料电池汽车产业情报日报",
+        f"",
+        f"📅 **{today}**  |  📰 **{total} 条情报**  |  🌍 **全球信源**",
+        f"",
+        "---",
+        "",
     ]
 
-    return "\n".join(doc_lines)
+    # 按重要性排序
+    priority = ["政策法规", "国际合作", "产业动态", "技术创新", "市场投资"]
+
+    for cat in priority:
+        items = categories.get(cat, [])
+        if not items:
+            continue
+        region_flags = {
+            "CN": "🇨🇳", "US": "🇺🇸", "GB": "🇬🇧", "JP": "🇯🇵",
+            "DE": "🇩🇪", "FR": "🇫🇷", "ES": "🇪🇸",
+        }
+        lines.append(f"## 📌 {cat}（{len(items)}条）")
+        lines.append("")
+        for i, item in enumerate(items, 1):
+            flag = region_flags.get(item["region"], "🌐")
+            # 提取真实域名
+            source_display = item["source"]
+            if len(source_display) > 15:
+                source_display = source_display[:15] + "…"
+            lines.append(f"**{i}. {item['title']}**")
+            lines.append(f"")
+            lines.append(f"📅 {item['date'][:22]}  |  {flag} [{source_display}]({item['url']})")
+            lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    lines += [
+        "",
+        "> 💡 **关于本报**",
+        "> 基于 Google News 全球信源自动检索生成，覆盖中、日、韩、美、欧等主要市场。",
+        "> 搜索范围包含各国政府公告、行业媒体、研究机构发布的最新资讯。",
+        "> 仅供研究参考，不构成投资建议。",
+        "",
+        f"> 🤖 由 GitHub Actions 自动生成推送 | {today}",
+    ]
+
+    return "\n".join(lines)
 
 
-def send_to_feishu(markdown_content, title):
-    """发送飞书卡片消息"""
+def send_to_feishu(markdown, title):
+    """飞书卡片推送"""
     ts = str(int(time_module.time()))
     sign_key = (ts + "\n" + FEISHU_SECRET).encode("utf-8")
     sig = base64.b64encode(hmac.new(sign_key, b"", hashlib.sha256).digest()).decode()
     url = f"{WEBHOOK_URL}?timestamp={ts}&sign={sig}"
 
-    # 飞书卡片最大 5000 字符，超长则截断
-    content = markdown_content[:4800]
-    if len(markdown_content) > 4800:
-        content += "\n\n> ⚠️ 内容过长已截断，完整报告请查看飞书文档"
+    # 飞书卡片限制 ~5000 字符
+    content = markdown[:4800]
+    if len(markdown) > 4800:
+        content += "\n\n> ⚠️ 内容过长已截断"
 
     payload = {
         "msg_type": "interactive",
@@ -181,12 +217,9 @@ def send_to_feishu(markdown_content, title):
                 "title": {"tag": "plain_text", "content": title},
                 "template": "blue",
             },
-            "elements": [
-                {"tag": "markdown", "content": content},
-            ],
+            "elements": [{"tag": "markdown", "content": content}],
         },
     }
-
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -197,19 +230,26 @@ def send_to_feishu(markdown_content, title):
 
 
 def main():
-    print("[INFO] Searching global sources for fuel cell vehicle intelligence...")
+    print("🔋 Fuel Cell Intelligence Daily")
+    print("=" * 50)
+    print("Searching global sources...")
     results = search_all()
 
     if not results:
-        print("[ERROR] No results found")
-        send_to_feishu("⚠️ 今日未搜索到燃料电池汽车相关新情报，请检查搜索引擎配置。", "🔋 燃料电池情报日报")
+        print("No results, sending empty notice...")
+        send_to_feishu("⚠️ 今日未检索到燃料电池汽车新情报。", "🔋 燃料电池情报日报")
         return
 
-    print(f"[INFO] Found {len(results)} results, generating summary...")
-    summary = generate_summary(results)
+    print(f"\nTotal: {len(results)} unique results")
+    print("Classifying...")
+    categories = classify(results)
+    for cat, items in categories.items():
+        print(f"  {cat}: {len(items)} items")
 
+    print("Generating report...")
+    report = generate_report(categories)
     title = f'🔋 燃料电池汽车情报日报 — {datetime.now().strftime("%m.%d")}'
-    send_to_feishu(summary, title)
+    send_to_feishu(report, title)
     print("[OK] Done!")
 
 
