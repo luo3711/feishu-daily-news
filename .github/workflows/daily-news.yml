@@ -2,7 +2,7 @@ name: Fuel Cell Intelligence Daily
 
 on:
   schedule:
-    - cron: "0 0 * * *"  # 北京时间 08:00
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,4 @@ jobs:
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
-          BING_API_KEY: ${{ secrets.BING_API_KEY }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-          SEARCH_ENGINE: ${{ vars.SEARCH_ENGINE || 'bing' }}
         run: python push_news.py
