@@ -5,12 +5,17 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   push-report:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: AI Analysis & Feishu Push
+      - name: Install dependencies
+        run: pip install python-docx requests
+      - name: AI Analysis & Generate DOCX
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
