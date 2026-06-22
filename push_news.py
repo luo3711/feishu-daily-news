@@ -10,7 +10,7 @@ WEBHOOK_URL   = os.environ["FEISHU_WEBHOOK_URL"]
 FEISHU_SECRET = os.environ["FEISHU_SECRET"]
 GITHUB_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
 AI_ENDPOINT   = "https://models.inference.ai.azure.com/chat/completions"
-AI_MODEL      = "gpt-4o-mini"
+AI_MODEL = "gpt-4o"
 
 QUERIES = [
     ("fuel cell vehicle policy hydrogen regulation subsidy 2026", "en-US", "US"),
