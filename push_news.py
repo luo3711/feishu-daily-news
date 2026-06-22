@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fuel Cell Intelligence Daily - Multi-Card Edition"""
+"""Fuel Cell Intelligence Daily - Professional Multi-Card Edition"""
 
 import json, os, urllib.request, urllib.parse, base64, hmac, hashlib
 import xml.etree.ElementTree as ET
@@ -9,17 +9,17 @@ from datetime import datetime, timedelta
 WEBHOOK_URL   = os.environ["FEISHU_WEBHOOK_URL"]
 FEISHU_SECRET = os.environ["FEISHU_SECRET"]
 GITHUB_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
-REPO          = os.environ.get("GITHUB_REPOSITORY", "bake7791/feishu-daily-news")
 AI_ENDPOINT   = "https://models.inference.ai.azure.com/chat/completions"
 AI_MODEL      = "gpt-4o-mini"
 
 QUERIES = [
-    ("fuel cell vehicle policy hydrogen regulation 2026", "en-US", "US"),
-    ("hydrogen fuel cell FCEV industry government strategy", "en-GB", "GB"),
-    ("Brennstoffzelle Wasserstoff Fahrzeug EU Politik", "de-DE", "DE"),
-    ("pile combustible hydrogene vehicule politique France", "fr-FR", "FR"),
-    ("fuel cell vehicle Toyota Honda Japan policy", "ja-JP", "JP"),
-    ("hydrogen fuel cell industry news China policy", "zh-CN", "CN"),
+    ("fuel cell vehicle policy hydrogen regulation subsidy 2026", "en-US", "US"),
+    ("hydrogen fuel cell FCEV industry government strategy investment", "en-GB", "GB"),
+    ("Brennstoffzelle Wasserstoff Fahrzeug EU Politik Forderung", "de-DE", "DE"),
+    ("pile combustible hydrogene vehicule politique France subvention", "fr-FR", "FR"),
+    ("fuel cell vehicle Toyota Honda Hyundai Japan Korea policy", "en-US", "US"),
+    ("hydrogen fuel cell truck bus commercial vehicle deployment China", "zh-CN", "CN"),
+    ("fuel cell stack membrane catalyst breakthrough technology", "en-US", "US"),
 ]
 
 MAX_ARTICLES = 30
@@ -42,7 +42,7 @@ def http_post_json(url, payload, headers=None):
 
 
 def search_google_news(query, hl, gl, max_results=50):
-    ceid_map = {"CN":"CN:zh-Hans","US":"US:en","GB":"GB:en","JP":"JP:ja","DE":"DE:de","FR":"FR:fr"}
+    ceid_map = {"CN":"CN:zh-Hans","US":"US:en","GB":"GB:en","JP":"JP:ja","DE":"DE:de","FR":"FR:fr","KR":"KR:ko"}
     ceid = ceid_map.get(gl, f'{gl}:{hl.split("-")[0]}')
     rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl={hl}&gl={gl}&ceid={ceid}"
     xml_data = http_get(rss_url, {"User-Agent": "Mozilla/5.0"})
@@ -87,52 +87,59 @@ def ai_analyze(articles):
         flag = {"CN":"[CN]","US":"[US]","GB":"[UK]","JP":"[JP]","DE":"[DE]","FR":"[FR]"}.get(a["region"],"")
         articles_text += f"\n{i+1}. {flag} {a['title']} | {a['source']}"
 
-    prompt = f"""You are a senior fuel cell vehicle industry analyst. Analyze today's global news ({len(articles)} items) and write a DETAILED report in Chinese using Markdown.
+    prompt = f"""你是一位资深燃料电池汽车产业研究总监，正在为项目组撰写每日产业情报简报。团队正在推动燃料电池汽车产业化落地，需要你从政策、技术、产业链、竞争格局等维度提供可指导决策的分析。
+
+以下是今日全球最新相关新闻（{len(articles)}条）：
 
 {articles_text}
 
-Structure (write 200-400 chars for each section, be substantive):
+请严格按以下结构撰写详细分析（每个部分 200-350 字），用中文 Markdown 格式：
 
-## 1. Today's Key Developments
-Pick the 5 most significant news items. For each: summarize the key takeaway (60-80 chars), explain WHY it matters (1-2 sentences), note the source country. Be specific with facts and figures.
+## 一、今日政策信号与监管动向
 
-## 2. Policy & Regulatory Landscape
-Analyze new policy signals, regulation changes, subsidy adjustments across China, EU, Japan, US. What direction are governments heading? What are the concrete policy details?
+逐条分析各国政府释放的具体政策信号。对每条政策，说明：具体内容（补贴金额/技术路线/目标数字）、实施时间表、对产业链各环节（整车/电堆/膜电极/氢能基础设施）的影响评估。重点区分"实质性利好"和"方向性表态"。用 **加粗** 标注关键数字和时间节点。
 
-## 3. Industry & Technology Trends
-What breakthroughs, production milestones, supply chain shifts, or corporate strategies emerged? Be specific about companies, technologies, numbers.
+## 二、关键技术与产业化进展
 
-## 4. Market & Investment Signals
-Funding rounds, partnerships, market forecasts, deployment numbers. What are the financial and commercial indicators?
+从今日新闻中提取实质性技术突破和产业化里程碑。说明：是哪家企业/研究机构、具体突破了什么（性能指标提升数据）、处于什么阶段（实验室/中试/小批量/量产）、技术路径的可推广性评估。对国内项目组有参考价值的，明确标注 **【可对标】**。
 
-## 5. Strategic Assessment
-Synthesize 3-5 key themes from today's intelligence. What should industry watchers pay attention to? (~150 chars)
+## 三、产业链与竞争格局分析
 
-Write in professional but accessible Chinese. Use specific data points when available."""
+分析今日新闻中反映的产业链变化：头部企业（丰田/现代/巴拉德/亿华通/重塑等）的战略动向；供应链关键环节（催化剂/质子交换膜/碳纸/双极板）的国产替代进展；新进入者的竞争策略；国际合作与合资动态。按 "机会" 和 "风险" 两个维度归纳。
+
+## 四、今日情报的行动建议
+
+基于以上分析，给出 4-5 条具体的、可操作的建议给项目组。每条建议包括：**做什么**（具体行动）、**为什么**（基于哪条情报）、**优先级**（高/中/低）。行动建议可以是：技术对标方向、政策申报窗口、供应链风险预警、合作伙伴考察方向、竞争应对策略等。
+
+注意：专业、务实、有数据支撑。避免泛泛而谈的正确废话。每一条分析都要有明确的情报依据。"""
 
     if not GITHUB_TOKEN:
         return "AI_TOKEN_MISSING"
 
     result = http_post_json(AI_ENDPOINT, {
         "model": AI_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 3000,
+        "messages": [{"role": "system", "content": "你是资深燃料电池汽车产业研究总监。输出专业、务实、有数据支撑的产业情报分析。避免空话套话。"},
+                     {"role": "user", "content": prompt}],
+        "max_tokens": 4000,
         "temperature": 0.3,
     }, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"})
     return result["choices"][0]["message"]["content"]
 
 
 def send_card(title, content, color="blue"):
-    """Send a single Feishu card"""
     ts = str(int(time_module.time()))
     sk = (ts + "\n" + FEISHU_SECRET).encode("utf-8")
     sig = base64.b64encode(hmac.new(sk, b"", hashlib.sha256).digest()).decode()
+
+    trim = content[:CARD_LIMIT]
+    if len(content) > CARD_LIMIT:
+        trim = trim[:CARD_LIMIT-60] + "\n\n---\n> (内容过长已截断，完整分析请联系项目组)"
 
     payload = {
         "msg_type": "interactive",
         "card": {
             "header": {"title": {"tag": "plain_text", "content": title}, "template": color},
-            "elements": [{"tag": "markdown", "content": content}],
+            "elements": [{"tag": "markdown", "content": trim}],
         },
     }
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -148,99 +155,75 @@ def send_card(title, content, color="blue"):
                 result = json.loads(resp.read().decode())
             if result.get("code") == 0:
                 return True
-            if attempt < 2:
-                time_module.sleep(2)
+            if attempt < 2: time_module.sleep(2)
         except:
-            if attempt < 2:
-                time_module.sleep(2)
+            if attempt < 2: time_module.sleep(2)
     return False
 
 
-def build_ai_card(ai_report, article_count, today):
-    """Card 1: AI analysis report"""
-    content = ai_report[:CARD_LIMIT]
-    if len(ai_report) > CARD_LIMIT:
-        content = content[:CARD_LIMIT-50] + "\n\n> (AI analysis truncated due to length)"
-
-    title = f"Fuel Cell Intelligence - {today}"
-    return title, content
-
-
 def build_source_cards(articles, today):
-    """Cards 2+: Source links, split across multiple cards"""
     flags = {"CN":"CN","US":"US","GB":"UK","JP":"JP","DE":"DE","FR":"FR"}
     cards = []
-
-    header = f"**Sources ({len(articles)} articles)**\n\n"
-    header_len = len(header)
-
-    current_card = [header]
-    current_len = header_len
-    card_idx = 1
+    header = f"**原始信源（{len(articles)}条）**\n\n"
+    current_card = [header]; current_len = len(header); card_idx = 1
 
     for i, a in enumerate(articles, 1):
         flag = flags.get(a["region"], "")
-        line = f"{i}. [{flag}] {a['title'][:60]}{'...' if len(a['title'])>60 else ''}\n"
-        line += f"   {a['url']}\n"
+        title = a["title"][:65] + ("..." if len(a["title"])>65 else "")
+        line = f"{i}. [{flag}] [{title}]({a['url']})\n"
         line += f"   *{a['source']}* | {a['date'][:22]}\n\n"
 
         if current_len + len(line) > CARD_LIMIT:
-            title = f"Sources ({card_idx}/{len(articles)}) - {today}" if card_idx == 1 else f"Sources (cont'd) - {today}"
-            cards.append((title, "".join(current_card).strip(), "green" if card_idx == 1 else "yellow"))
-            card_idx += 1
-            current_card = []
-            current_len = 0
-
-        current_card.append(line)
-        current_len += len(line)
+            t = f"[{card_idx}/{len(articles)}] Sources - {today}" if card_idx == 1 else f"Sources (cont'd) - {today}"
+            cards.append((t, "".join(current_card).strip(), "green" if card_idx == 1 else "yellow"))
+            card_idx += 1; current_card = []; current_len = 0
+        current_card.append(line); current_len += len(line)
 
     if current_card:
-        title = f"Sources ({card_idx}/{len(articles)}) - {today}" if card_idx == 1 else f"Sources (cont'd) - {today}"
-        cards.append((title, "".join(current_card).strip(), "green" if card_idx == 1 else "yellow"))
-
+        t = f"[{card_idx}/{len(articles)}] Sources - {today}" if card_idx == 1 else f"Sources (cont'd) - {today}"
+        cards.append((t, "".join(current_card).strip(), "green" if card_idx == 1 else "yellow"))
     return cards
 
 
 def main():
     print("=" * 50)
-    print("Fuel Cell Intelligence - Multi-Card")
+    print("Fuel Cell Intelligence - Pro Edition")
     print("=" * 50)
 
     td = datetime.now()
     today = td.strftime("%m.%d")
+    today_full = td.strftime("%Y-%m-%d")
 
-    # Step 1: Search
-    print("\n[1/3] Searching...")
+    print("\n[1/3] Searching global sources...")
     articles = search_all()
     print(f"  Total: {len(articles)}")
-
     if not articles:
-        send_card(f"No News - {today}", "No fuel cell vehicle news found today.")
+        send_card(f"No News - {today}", "No fuel cell vehicle news found.", "red")
         return
 
-    # Step 2: AI Analysis
-    print("\n[2/3] AI Analyzing...")
+    print("\n[2/3] AI Deep Analysis (this may take 20-30s)...")
     ai_report = ai_analyze(articles)
     if ai_report == "AI_TOKEN_MISSING":
-        print("  AI skipped (no token)")
-        ai_report = f"## Today's Intelligence\n\n{len(articles)} articles collected. See source cards below.\n\n"
-    else:
-        print(f"  Report: {len(ai_report)} chars")
+        ai_report = f"## Today's Intelligence\n\n{len(articles)} articles collected.\n\n(AI analysis unavailable - token not configured)"
+    print(f"  Report: {len(ai_report)} chars")
 
-    # Step 3: Send cards
-    print("\n[3/3] Sending cards...")
+    print("\n[3/3] Pushing cards...")
 
-    # Card 1: AI Analysis
-    title1, content1 = build_ai_card(ai_report, len(articles), today)
-    ok = send_card(title1, content1)
-    print(f"  Card 1 (AI): {'OK' if ok else 'FAILED'}")
+    # Card 1: AI Analysis Report
+    ai_content = ai_report[:CARD_LIMIT]
+    if len(ai_report) > CARD_LIMIT:
+        ai_content = ai_report[:CARD_LIMIT-80] + "\n\n---\n> ⚠️ 报告过长已截断。完整分析请联系项目组获取。"
+
+    title1 = f"Fuel Cell Intelligence - {today_full}"
+    ok1 = send_card(title1, ai_content)
+    print(f"  Card 1 (AI Analysis): {'OK' if ok1 else 'FAILED'}")
 
     # Cards 2+: Sources
     source_cards = build_source_cards(articles, today)
-    for i, (title, content, color) in enumerate(source_cards):
-        ok = send_card(title, content, color)
-        print(f"  Card {i+2} (Sources): {'OK' if ok else 'FAILED'}")
+    for i, (t, c, clr) in enumerate(source_cards):
         time_module.sleep(1)
+        ok = send_card(t, c, clr)
+        print(f"  Card {i+2} (Sources): {'OK' if ok else 'FAILED'}")
 
     print(f"\nDone! {1+len(source_cards)} cards sent.")
 
