@@ -15,4 +15,4 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: python publish.py
+        run: python pubilish.py
