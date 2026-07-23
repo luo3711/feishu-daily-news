@@ -30,6 +30,7 @@ FEISHU_CHAT_ID    = os.environ.get("FEISHU_CHAT_ID", "")
 GITHUB_TOKEN      = os.environ.get("GITHUB_TOKEN", "")
 _tenant_token = None
 _tenant_token_expiry = 0
+DOCX_API_BASE     = "https://open.feishu.cn/open-apis/docx/v1"
 
 # ── Helpers ────────────────────────────────────────────────────────
 def http_get(url, headers=None):
@@ -176,6 +177,87 @@ def ai_analyze(articles):
             return {"raw": True, "text": f"AI分析失败: {e2}"}
 
 # ── Feishu ─────────────────────────────────────────────────────────
+def create_feishu_doc(title):
+    """Create a Feishu cloud document and return doc_id and doc_url."""
+    token = get_tenant_token()
+    resp = http_post_json(
+        f"{DOCX_API_BASE}/documents",
+        {"title": title},
+        headers={"Authorization": "Bearer " + token}
+    )
+    doc_id = resp["data"]["document"]["document_id"]
+    doc_url = resp["data"]["document"]["url"]
+    return doc_id, doc_url
+
+def add_doc_blocks(doc_id, blocks):
+    """Append blocks to a Feishu document."""
+    token = get_tenant_token()
+    for i in range(0, len(blocks), 50):
+        batch = blocks[i:i+50]
+        http_post_json(
+            f"{DOCX_API_BASE}/documents/{doc_id}/blocks/{doc_id}/children",
+            {"children": batch, "index": -1},
+            headers={"Authorization": "Bearer " + token}
+        )
+
+def report_to_doc_blocks(ai_result):
+    """Convert AI report to Feishu Docx blocks."""
+    blocks = []
+    # Headline
+    if not ai_result.get("raw"):
+        h = ai_result.get("headline", "")
+        for line in h.split("\n"):
+            line = line.strip()
+            if line:
+                blocks.append({"block_type": 3, "heading1": {"elements": [{"text_run": {"content": line}}], "style": {}}})
+    
+    # Key points
+    kps = ai_result.get("key_points", [])
+    if kps:
+        blocks.append({"block_type": 3, "heading1": {"elements": [{"text_run": {"content": "今日重点"}}], "style": {}}})
+        for kp in kps:
+            blocks.append({"block_type": 7, "bullet": {"elements": [{"text_run": {"content": kp}}], "style": {}}})
+    
+    # Sections body (parsed from Markdown)
+    body = ai_result.get("text", "") if ai_result.get("raw") else ai_result.get("sections", "")
+    # Split by ## headers
+    parts = body.split("\n## ")
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        lines = part.split("\n", 1)
+        heading = lines[0].strip().lstrip("#").strip()
+        content = lines[1].strip() if len(lines) > 1 else ""
+        blocks.append({"block_type": 3, "heading1": {"elements": [{"text_run": {"content": heading}}], "style": {}}})
+        # Split content into paragraphs
+        for para in content.split("\n\n"):
+            para = para.strip()
+            if para:
+                if para.startswith("- "):
+                    for bullet_line in para.split("\n"):
+                        bullet_line = bullet_line.strip().lstrip("- ").strip()
+                        if bullet_line:
+                            blocks.append({"block_type": 7, "bullet": {"elements": [{"text_run": {"content": bullet_line}}], "style": {}}})
+                else:
+                    blocks.append({"block_type": 2, "text": {"elements": [{"text_run": {"content": para}}], "style": {}}})
+    return blocks
+
+def source_articles_to_blocks(articles):
+    """Convert source articles to Docx blocks (ordered list with links)."""
+    blocks = []
+    blocks.append({"block_type": 3, "heading1": {"elements": [{"text_run": {"content": "信源链接"}}], "style": {}}})
+    flags = {"CN":"[CN]","US":"[US]","GB":"[UK]","JP":"[JP]","DE":"[DE]","FR":"[FR]"}
+    for i, a in enumerate(articles, 1):
+        flag = flags.get(a["region"], "")
+        text = f"{i}. {flag} {a['title']} - {a['source']}"
+        blocks.append({"block_type": 2, "text": {"elements": [
+            {"text_run": {"content": f"{i}. {flag} "}},
+            {"text_run": {"content": a["title"], "text_element_style": {"link": {"url": a["url"]}}}},
+            {"text_run": {"content": f" - {a['source']}"}}
+        ], "style": {}}})
+    return blocks
+
 def get_tenant_token():
     global _tenant_token, _tenant_token_expiry
     if _tenant_token and time_module.time() < _tenant_token_expiry - 60:
@@ -343,6 +425,25 @@ def main():
     for title, content, color in build_source_cards(articles, today_full.split("-")[1]):
         push(title, content, color, dry)
         print(f"  {title} OK" if not dry else f"  {title} (dry)")
+
+    # Create Feishu Docx
+    print("[4/4] Creating Feishu Document...")
+    try:
+        doc_title = f"Fuel Cell Intelligence - {today_full}"
+        doc_id, doc_url = create_feishu_doc(doc_title)
+        doc_blocks = report_to_doc_blocks(ai_result) + source_articles_to_blocks(articles)
+        add_doc_blocks(doc_id, doc_blocks)
+        # Send doc link card
+        link_card = {
+            "header": {"title": {"tag": "plain_text", "content": "完整日报文档"}, "template": "green"},
+            "elements": [{"tag": "markdown", "content": f"[点击查看今日完整日报]({doc_url})"}],
+        }
+        link_body = {"receive_id": FEISHU_CHAT_ID, "msg_type": "interactive", "content": json.dumps(link_card, ensure_ascii=False)}
+        token = get_tenant_token()
+        http_post_json("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", link_body, headers={"Authorization": "Bearer " + token})
+        print(f"  Doc created: {doc_url}")
+    except Exception as e:
+        print(f"  [WARN] Docx creation failed: {e}")
 
     print("Done!")
 
