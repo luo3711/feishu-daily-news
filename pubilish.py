@@ -1,37 +1,38 @@
 #!/usr/bin/env python3
-"""Fuel Cell Intelligence Daily - Complete Structured Edition"""
+"""Fuel Cell Intelligence Daily - Config-Driven Edition"""
 
 import json, os, urllib.request, urllib.parse, base64, hmac, hashlib
 import xml.etree.ElementTree as ET
 import time as time_module
 from datetime import datetime
+from pathlib import Path
 
+# ── Load config files ──────────────────────────────────────────────
+CONFIG_DIR = Path(__file__).parent / "config"
+
+def _load_json(name):
+    with open(CONFIG_DIR / name, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _load_text(name):
+    with open(CONFIG_DIR / name, "r", encoding="utf-8") as f:
+        return f.read()
+
+CFG    = _load_json("settings.json")
+SRC    = _load_json("sources.json")
+PROMPT_SYSTEM = _load_text("prompt_system.txt")
+PROMPT_USER   = _load_text("prompt_user.txt")
+
+# Env vars
 WEBHOOK_URL   = os.environ["FEISHU_WEBHOOK_URL"]
 FEISHU_SECRET = os.environ["FEISHU_SECRET"]
 GITHUB_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
-AI_ENDPOINT   = "https://models.inference.ai.azure.com/chat/completions"
-AI_MODEL = "gpt-4o"
 
-QUERIES = [
-    ("fuel cell vehicle policy hydrogen regulation subsidy 2026", "en-US", "US"),
-    ("hydrogen fuel cell FCEV industry strategy investment", "en-GB", "GB"),
-    ("Brennstoffzelle Wasserstoff Fahrzeug EU Politik", "de-DE", "DE"),
-    ("pile combustible hydrogene vehicule France", "fr-FR", "FR"),
-    ("fuel cell vehicle Toyota Honda Hyundai Japan Korea", "en-US", "US"),
-    ("fuel cell truck bus commercial vehicle deployment China hydrogen", "zh-CN", "CN"),
-    ("fuel cell stack membrane catalyst breakthrough technology", "en-US", "US"),
-    ("hydrogen price refueling station green hydrogen cost 2026", "en-US", "US"),
-    ("加氢站 氢气价格 绿氢 示范项目 2026", "zh-CN", "CN"),
-]
-
-MAX_ARTICLES = 25
-
-
+# ── Helpers ────────────────────────────────────────────────────────
 def http_get(url, headers=None):
     req = urllib.request.Request(url, headers=headers or {})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8")
-
 
 def http_post_json(url, payload, headers=None):
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -41,16 +42,19 @@ def http_post_json(url, payload, headers=None):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read().decode("utf-8"))
 
-
+# ── Search ─────────────────────────────────────────────────────────
 def search_google_news(query, hl, gl, max_results=50):
-    ceid_map = {"CN":"CN:zh-Hans","US":"US:en","GB":"GB:en","JP":"JP:ja","DE":"DE:de","FR":"FR:fr"}
-    ceid = ceid_map.get(gl, f'{gl}:{hl.split("-")[0]}')
-    rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl={hl}&gl={gl}&ceid={ceid}"
+    ceid = CFG["ceid_map"].get(gl, f'{gl}:{hl.split("-")[0]}')
+    rss_url = (
+        f"https://news.google.com/rss/search?"
+        f"q={urllib.parse.quote(query)}&hl={hl}&gl={gl}&ceid={ceid}"
+    )
     xml_data = http_get(rss_url, {"User-Agent": "Mozilla/5.0"})
     root = ET.fromstring(xml_data)
     results = []
     for item in root.findall(".//item"):
-        t = item.find("title"); l = item.find("link"); s = item.find("source"); p = item.find("pubDate")
+        t = item.find("title"); l = item.find("link")
+        s = item.find("source"); p = item.find("pubDate")
         title = t.text.strip() if t is not None and t.text else ""
         link = l.text if l is not None else ""
         source = s.text.strip() if s is not None and s.text else "Unknown"
@@ -58,75 +62,55 @@ def search_google_news(query, hl, gl, max_results=50):
         skip = ["stock", "share price", "sponsored", "advertisement"]
         if not title or any(w in title.lower() for w in skip):
             continue
-        results.append({"title":title,"url":link,"source":source,"date":pubdate,"region":gl})
-        if len(results)>=max_results: break
+        results.append({
+            "title": title, "url": link, "source": source,
+            "date": pubdate, "region": gl,
+        })
+        if len(results) >= max_results:
+            break
     return results
-
 
 def search_all():
     seen = set(); all_results = []
-    for query, hl, gl in QUERIES:
+    for q in SRC["queries"]:
         try:
-            results = search_google_news(query, hl, gl)
-            print(f"  [{gl}] -> {len(results)} results")
+            results = search_google_news(q["query"], q["hl"], q["gl"])
+            print(f"  [{q['gl']}] -> {len(results)} results")
             for r in results:
                 key = r["title"][:80]
                 if key not in seen:
                     seen.add(key); all_results.append(r)
         except Exception as e:
-            print(f"  [WARN] {gl}: {e}")
+            print(f"  [WARN] {q['gl']}: {e}")
     def pd(r):
         try: return datetime.strptime(r["date"], "%a, %d %b %Y %H:%M:%S %Z")
         except: return datetime.min
     all_results.sort(key=pd, reverse=True)
-    return all_results[:MAX_ARTICLES]
+    return all_results[:SRC["max_articles"]]
 
-
+# ── AI ─────────────────────────────────────────────────────────────
 def ai_analyze(articles):
+    flags = CFG["region_flags"]
     articles_text = ""
     for i, a in enumerate(articles):
-        flag = {"CN":"[CN]","US":"[US]","GB":"[UK]","JP":"[JP]","DE":"[DE]","FR":"[FR]"}.get(a["region"],"")
+        flag = flags.get(a["region"], "")
         articles_text += f"\n{i+1}. {flag} {a['title']} | {a['source']}"
-
-    prompt = f"""你是燃料电池汽车产业研究总监，为风氢扬公司老板撰写今日全球产业情报日报。语言精炼、专业、只说实质内容。
-
-今日全球新闻（{len(articles)}条）：
-{articles_text}
-
-严格输出 JSON 对象，字段如下：
-- headline: 字符串，3 行定调用 \\n 分隔。第1行"今日最关键信号"，第2行"最大机会"，第3行"最大风险"。每行不超过40字。
-- key_points: 字符串数组，5 条今日重点，每条格式"[区域] 一句话要点"，区域用 CN/欧美/日韩 之一。
-- sections: 字符串，五段 Markdown 正文（段间用 \\n\\n 分隔），依次为：
-
-## 一、政策与监管信号
-分中国/欧美/日韩，每条写明谁（国家/机构）、做了什么（补贴金额/技术路线/目标数字）、影响范围。区分实质利好与表态性信号。
-
-## 二、技术与产业化进展
-实质性技术突破和量产进展。写明企业、突破什么、具体性能指标、当前阶段（实验室/中试/量产）。与国内项目可对标的标【可对标】。
-
-## 三、竞争格局与企业动向
-点名具体企业（丰田、现代、巴拉德、亿华通等），分析战略动向、市场份额变化、供应链动作。按机会和风险两个维度归纳。
-
-## 四、市场与需求动态
-氢气价格走势、下游订单与需求、加氢站建设进度、示范项目落地情况。
-
-## 五、对我司的影响与行动建议
-4-5 条可操作建议。每条：具体行动 + 情报依据 + 优先级（高/中/低）。聚焦技术对标、政策申报、供应链风控、合作机会。
-
-只输出 JSON 对象，不要 markdown 代码块包裹，不要开头语、结束语、免责声明。"""
 
     if not GITHUB_TOKEN:
         return {"raw": True, "text": "AI_TOKEN_MISSING"}
 
     try:
-        result = http_post_json(AI_ENDPOINT, {
-            "model": AI_MODEL,
+        result = http_post_json(CFG["ai_endpoint"], {
+            "model": CFG["ai_model"],
             "messages": [
-                {"role": "system", "content": "你是资深燃料电池产业分析师。输出精炼、专业、只说实质内容。严格按要求的 JSON 格式输出，不要任何多余文字。"},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": PROMPT_SYSTEM},
+                {"role": "user", "content": PROMPT_USER.format(
+                    article_count=len(articles),
+                    articles_text=articles_text,
+                )},
             ],
-            "max_tokens": 4000,
-            "temperature": 0.3,
+            "max_tokens": CFG["max_tokens"],
+            "temperature": CFG["temperature"],
             "response_format": {"type": "json_object"},
         }, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"})
         content = result["choices"][0]["message"]["content"]
@@ -140,35 +124,44 @@ def ai_analyze(articles):
     except Exception as e:
         print(f"  [WARN] AI JSON failed: {e}; fallback to raw text")
         try:
-            result = http_post_json(AI_ENDPOINT, {
-                "model": AI_MODEL,
+            result = http_post_json(CFG["ai_endpoint"], {
+                "model": CFG["ai_model"],
                 "messages": [
-                    {"role": "system", "content": "你是资深燃料电池产业分析师。输出精炼、专业、只说实质内容。"},
-                    {"role": "user", "content": f"基于以下新闻撰写五段式 Markdown 情报简报（政策/技术/竞争/市场/行动建议）：\n{articles_text}"}
+                    {"role": "system", "content": PROMPT_SYSTEM},
+                    {"role": "user", "content": f"基于以下新闻撰写五段式 Markdown 情报简报（政策/技术/竞争/市场/行动建议）：\n{articles_text}"},
                 ],
                 "max_tokens": 3000,
-                "temperature": 0.3,
+                "temperature": CFG["temperature"],
             }, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"})
             return {"raw": True, "text": result["choices"][0]["message"]["content"]}
         except Exception as e2:
             return {"raw": True, "text": f"AI分析失败: {e2}"}
 
-
-def send_card(title, content, color="blue"):
-    data = json.dumps({
+# ── Feishu ─────────────────────────────────────────────────────────
+def send_card(title, content, color):
+    payload = {
         "msg_type": "interactive",
         "card": {
-            "header": {"title": {"tag": "plain_text", "content": title[:80]}, "template": color},
+            "header": {
+                "title": {"tag": "plain_text", "content": title[:80]},
+                "template": color,
+            },
             "elements": [{"tag": "markdown", "content": content}],
         },
-    }, ensure_ascii=False).encode("utf-8")
-
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     for attempt in range(3):
         ts = str(int(time_module.time()))
         sk = (ts + "\n" + FEISHU_SECRET).encode("utf-8")
-        sig = base64.b64encode(hmac.new(sk, b"", hashlib.sha256).digest()).decode()
+        sig = base64.b64encode(
+            hmac.new(sk, b"", hashlib.sha256).digest()
+        ).decode()
         url = f"{WEBHOOK_URL}?timestamp={ts}&sign={sig}"
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode())
@@ -179,33 +172,28 @@ def send_card(title, content, color="blue"):
             if attempt < 2: time_module.sleep(2)
     return False
 
-
+# ── Card building ──────────────────────────────────────────────────
 def split_markdown(content, limit=4500):
-    if not content:
-        return []
-    if len(content) <= limit:
-        return [content]
+    if not content: return []
+    if len(content) <= limit: return [content]
     chunks = []; current = ""
     for p in content.split("\n\n"):
         seg = p + "\n\n"
         if len(current) + len(seg) > limit and current:
             chunks.append(current.rstrip()); current = ""
         current += seg
-    if current.strip():
-        chunks.append(current.rstrip())
+    if current.strip(): chunks.append(current.rstrip())
     final = []
     for c in chunks:
-        if len(c) <= limit:
-            final.append(c)
+        if len(c) <= limit: final.append(c)
         else:
             for i in range(0, len(c), limit):
                 final.append(c[i:i+limit])
     return final
 
-
 def build_summary_card(ai_result, today_full):
     if ai_result.get("raw"):
-        return (f"Fuel Cell Intelligence - {today_full}", "摘要生成失败，详见正文卡。", "blue")
+        return f"Fuel Cell Intelligence - {today_full}", "摘要生成失败，详见正文卡。", CFG["no_news_card_color"]
     headline = ai_result.get("headline", "")
     key_points = ai_result.get("key_points", [])
     labels = ["最关键信号", "最大机会", "最大风险"]
@@ -216,17 +204,19 @@ def build_summary_card(ai_result, today_full):
     lines += ["", "## 今日重点", ""]
     for i, kp in enumerate(key_points, 1):
         lines.append(f"{i}. {kp}")
-    return (f"Fuel Cell Intelligence - {today_full}", "\n".join(lines), "blue")
-
+    return f"Fuel Cell Intelligence - {today_full}", "\n".join(lines), CFG["summary_card_color"]
 
 def build_source_cards(articles, today):
-    flags = {"CN":"CN","US":"US","GB":"UK","JP":"JP","DE":"DE","FR":"FR"}
-    bucket_order = [("中国", {"CN"}), ("欧美", {"US","GB","DE","FR"}), ("日韩", {"JP","KR"}), ("其他", None)]
-    buckets = {name: [] for name, _ in bucket_order}
+    flags = CFG["region_flags"]
+    buckets_def = CFG["region_buckets"]
+    buckets = {name: [] for name in buckets_def}
     for a in articles:
-        for name, regs in bucket_order:
-            if regs is None or a["region"] in regs:
-                buckets[name].append(a); break
+        placed = False
+        for name, regs in buckets_def.items():
+            if a["region"] in regs:
+                buckets[name].append(a); placed = True; break
+        if not placed and "其他" in buckets:
+            buckets["其他"].append(a)
 
     cards = []
     current = ""; current_len = 0; card_idx = 1
@@ -234,31 +224,27 @@ def build_source_cards(articles, today):
         nonlocal current, current_len, card_idx
         if current.strip():
             title = f"Sources {card_idx} - {today}"
-            cards.append((title, current.strip(), "green" if card_idx == 1 else "yellow"))
+            color = CFG["source_card_color_1"] if card_idx == 1 else CFG["source_card_color_2"]
+            cards.append((title, current.strip(), color))
             card_idx += 1
         current = ""; current_len = 0
 
     global_idx = 0
-    for name, _ in bucket_order:
+    for name in buckets_def:
         items = buckets[name]
-        if not items:
-            continue
+        if not items: continue
         header = f"## {name}\n\n"
-        if current_len + len(header) > 4500 and current:
-            flush()
+        if current_len + len(header) > 4500 and current: flush()
         current += header; current_len += len(header)
         for a in items:
             global_idx += 1
             flag = flags.get(a["region"], "")
             t = a["title"][:65] + ("..." if len(a["title"]) > 65 else "")
             line = f"{global_idx}. [{flag}] [{t}]({a['url']})\n   *{a['source']}*\n\n"
-            if current_len + len(line) > 4500:
-                flush()
-                current = ""; current_len = 0
+            if current_len + len(line) > 4500: flush()
             current += line; current_len += len(line)
     flush()
     return cards
-
 
 def push(title, content, color, dry):
     if dry:
@@ -268,9 +254,10 @@ def push(title, content, color, dry):
     time_module.sleep(1)
     return ok
 
-
+# ── Main ───────────────────────────────────────────────────────────
 def main():
-    td = datetime.now(); today = td.strftime("%m.%d"); today_full = td.strftime("%Y-%m-%d")
+    td = datetime.now()
+    today_full = td.strftime("%Y-%m-%d")
     dry = bool(os.environ.get("DRY_RUN"))
 
     print("[1/3] Searching...")
@@ -279,9 +266,9 @@ def main():
 
     if not articles:
         if dry:
-            print("\n=== No News (red) ===\nNo fuel cell news today.\n")
+            print("\n=== No News ===\nNo fuel cell news today.\n")
         else:
-            send_card("No News", "No fuel cell news today.", "red")
+            send_card("No News", "No fuel cell news today.", CFG["no_news_card_color"])
         return
 
     print("[2/3] AI Analyzing...")
@@ -296,23 +283,22 @@ def main():
     print("  Summary card OK" if not dry else "  Summary card (dry)")
 
     # Card 2+: Report body
-    if ai_result.get("raw"):
-        body = ai_result.get("text", "")
-    else:
-        body = ai_result.get("sections", "")
+    body = ai_result.get("text", "") if ai_result.get("raw") else ai_result.get("sections", "")
     chunks = split_markdown(body)
     for idx, chunk in enumerate(chunks, 1):
-        title = f"Fuel Cell Report {idx} - {today_full}" if len(chunks) > 1 else f"Fuel Cell Report - {today_full}"
-        push(title, chunk, "grey", dry)
+        title = (
+            f"Fuel Cell Report {idx} - {today_full}"
+            if len(chunks) > 1 else f"Fuel Cell Report - {today_full}"
+        )
+        push(title, chunk, CFG["report_card_color"], dry)
         print(f"  {title} OK" if not dry else f"  {title} (dry)")
 
     # Cards: Sources (region-grouped)
-    for title, content, color in build_source_cards(articles, today):
+    for title, content, color in build_source_cards(articles, today_full.split("-")[1]):
         push(title, content, color, dry)
         print(f"  {title} OK" if not dry else f"  {title} (dry)")
 
     print("Done!")
-
 
 if __name__ == "__main__":
     main()
