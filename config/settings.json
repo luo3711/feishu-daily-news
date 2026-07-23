@@ -1,7 +1,7 @@
 {
   "ai_endpoint": "https://models.inference.ai.azure.com/chat/completions",
   "ai_model": "gpt-4o",
-  "max_tokens": 4000,
+  "max_tokens": 5000,
   "temperature": 0.3,
   "summary_card_color": "blue",
   "report_card_color": "grey",
