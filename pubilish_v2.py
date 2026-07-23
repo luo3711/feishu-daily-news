@@ -186,7 +186,7 @@ def create_feishu_doc(title):
         headers={"Authorization": "Bearer " + token}
     )
     doc_id = resp["data"]["document"]["document_id"]
-    doc_url = resp["data"]["document"]["url"]
+    doc_url = resp["data"]["document"].get("url", f"https://bytedance.feishu.cn/docx/{doc_id}")
     return doc_id, doc_url
 
 def add_doc_blocks(doc_id, blocks):
