@@ -1,0 +1,19 @@
+name: publish_test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test
+      - name: AI Analysis - Enterprise App
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python pubilish_v2.py
