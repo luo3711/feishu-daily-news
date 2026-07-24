@@ -7,7 +7,7 @@ import time as time_module
 from datetime import datetime
 from pathlib import Path
 
-# ── Load config files ──────────────────────────────────────────────
+# ── Load config files 读取配置文件──────────────────────────────────────────────
 CONFIG_DIR = Path(__file__).parent / "config"
 
 def _load_json(name):
@@ -23,7 +23,7 @@ SRC    = _load_json("sources.json")
 PROMPT_SYSTEM = _load_text("prompt_system.txt")
 PROMPT_USER   = _load_text("prompt_user.txt")
 
-# Env vars
+# Env vars读取环境变量
 WEBHOOK_URL   = os.environ["FEISHU_WEBHOOK_URL"]
 FEISHU_SECRET = os.environ["FEISHU_SECRET"]
 GITHUB_TOKEN  = os.environ.get("GITHUB_TOKEN", "")
