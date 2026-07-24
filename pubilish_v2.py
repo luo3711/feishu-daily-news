@@ -440,7 +440,7 @@ def main():
         }
         link_body = {"receive_id": FEISHU_CHAT_ID, "msg_type": "interactive", "content": json.dumps(link_card, ensure_ascii=False)}
         token = get_tenant_token()
-        http_post_json("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", link_body, headers={"Authorization": "Bearer " + token})
+        http_post_json("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id", link_body, headers={"Authorization": "Bearer " + token})
         print(f"  Doc created: {doc_url}")
     except Exception as e:
         print(f"  [WARN] Docx creation failed: {e}")
