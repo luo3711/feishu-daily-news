@@ -1,0 +1,41 @@
+{
+  "ai_endpoint": "https://models.inference.ai.azure.com/chat/completions",
+  "ai_model": "gpt-4o",
+  "max_tokens": 5000,
+  "temperature": 0.3,
+  "summary_card_color": "blue",
+  "report_card_color": "grey",
+  "source_card_color_1": "green",
+  "source_card_color_2": "yellow",
+  "no_news_card_color": "red",
+  "ceid_map": {
+    "CN": "CN:zh-Hans",
+    "US": "US:en",
+    "GB": "GB:en",
+    "CL": "CL:es",
+    "PE": "PE:es",
+    "AU": "AU:en",
+    "CD": "CD:fr",
+    "ID": "ID:id",
+    "IN": "IN:en"
+  },
+  "region_flags": {
+    "CN": "[CN]",
+    "US": "[US]",
+    "GB": "[UK]",
+    "CL": "[CL]",
+    "PE": "[PE]",
+    "AU": "[AU]",
+    "CD": "[CD]",
+    "ID": "[ID]",
+    "IN": "[IN]"
+  },
+  "region_buckets": {
+    "中国": ["CN"],
+    "南美矿区": ["CL", "PE"],
+    "非洲矿区": ["CD"],
+    "亚太": ["AU", "ID", "IN"],
+    "欧美": ["US", "GB"],
+    "其他": []
+  }
+}
