@@ -847,9 +847,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     chunks = split_markdown(body)
     for idx, chunk in enumerate(chunks, 1):
         if len(chunks) > 1:
-            title = f"Fuel Cell Report {idx} - {today_full}"
+            title = f"铜/预焙阳极情报日报 {idx} - {today_full}"
         else:
-            title = f"Fuel Cell Report - {today_full}"
+            title = f"铜/预焙阳极情报日报 - {today_full}"
         delivery.push(title, chunk, cfg.get("report_card_color", "grey"))
         logger.info("  %s OK", title)
 
