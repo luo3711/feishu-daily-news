@@ -27,7 +27,8 @@ PROMPT_USER   = _load_text("prompt_user.txt")
 FEISHU_APP_ID     = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
 FEISHU_CHAT_ID    = os.environ.get("FEISHU_CHAT_ID", "")
-FEISHU_OPEN_ID    = os.environ.get("FEISHU_OPEN_ID", "")
+_raw_open_ids     = os.environ.get("FEISHU_OPEN_ID", "")
+FEISHU_OPEN_IDS   = [x.strip() for x in _raw_open_ids.split(",") if x.strip()]
 GITHUB_TOKEN      = os.environ.get("GITHUB_TOKEN", "")
 _tenant_token = None
 _tenant_token_expiry = 0
@@ -272,16 +273,19 @@ def get_tenant_token():
     return _tenant_token
 
 def send_card(title, content, color):
-    if FEISHU_OPEN_ID:
-        receive_id_type = "open_id"
-        receive_id = FEISHU_OPEN_ID
+    if FEISHU_OPEN_IDS:
+        ok = True
+        for open_id in FEISHU_OPEN_IDS:
+            if not _send_card_one("open_id", open_id, title, content, color):
+                ok = False
+        return ok
     elif FEISHU_CHAT_ID:
-        receive_id_type = "chat_id"
-        receive_id = FEISHU_CHAT_ID
+        return _send_card_one("chat_id", FEISHU_CHAT_ID, title, content, color)
     else:
         print("  [ERROR] Neither FEISHU_OPEN_ID nor FEISHU_CHAT_ID is set")
         return False
 
+def _send_card_one(receive_id_type, receive_id, title, content, color):
     card = {
         "header": {
             "title": {"tag": "plain_text", "content": title[:80]},
@@ -449,10 +453,14 @@ def main():
             "header": {"title": {"tag": "plain_text", "content": "完整日报文档"}, "template": "green"},
             "elements": [{"tag": "markdown", "content": f"[点击查看今日完整日报]({doc_url})"}],
         }
-        link_body = {"receive_id": FEISHU_OPEN_ID or FEISHU_CHAT_ID, "msg_type": "interactive", "content": json.dumps(link_card, ensure_ascii=False)}
+        if FEISHU_OPEN_IDS:
+            for open_id in FEISHU_OPEN_IDS:
+                link_body = {"receive_id": open_id, "msg_type": "interactive", "content": json.dumps(link_card, ensure_ascii=False)}
+                http_post_json("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id", link_body, headers={"Authorization": "Bearer " + token})
+        elif FEISHU_CHAT_ID:
+            link_body = {"receive_id": FEISHU_CHAT_ID, "msg_type": "interactive", "content": json.dumps(link_card, ensure_ascii=False)}
+            http_post_json("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", link_body, headers={"Authorization": "Bearer " + token})
         token = get_tenant_token()
-        doc_receive_id_type = "open_id" if FEISHU_OPEN_ID else "chat_id"
-        http_post_json(f"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={doc_receive_id_type}", link_body, headers={"Authorization": "Bearer " + token})
         print(f"  Doc created: {doc_url}")
     except Exception as e:
         print(f"  [WARN] Docx creation failed: {e}")
