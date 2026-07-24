@@ -770,10 +770,10 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     # ---- load config ----
     try:
-        cfg = _load_json("settings.json")
-        src = _load_json("sources.json")
-        prompt_system = _load_text("prompt_system.txt")
-        prompt_user = _load_text("prompt_user.txt")
+        cfg = _load_json("robot_setting.json")
+        src = _load_json("robot_source.json")
+        prompt_system = _load_text("robot_id.txt")
+        prompt_user = _load_text("robot_prompt.txt")
     except FileNotFoundError as exc:
         logger.error(str(exc))
         sys.exit(1)
