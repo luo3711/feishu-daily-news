@@ -17,4 +17,4 @@ jobs:
           FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
           FEISHU_OPEN_ID: ${{ secrets.FEISHU_OPEN_ID }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: python pubilish_v2.py
+        run: python publish_pro_v2.py
