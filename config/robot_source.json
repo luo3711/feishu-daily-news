@@ -1,0 +1,122 @@
+{
+  "max_articles": 40,
+  "queries": [
+    {
+      "query": "copper price LME SHFE COMEX forecast 2025 2026",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "copper mine production Chile Peru Congo output disruption",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "copper smelter TC RC treatment charges China shortage",
+      "hl": "en-GB",
+      "gl": "GB"
+    },
+    {
+      "query": "copper demand EV electrification grid infrastructure renewable",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "copper inventory LME SHFE bonded warehouse stock drawdown",
+      "hl": "en-GB",
+      "gl": "GB"
+    },
+    {
+      "query": "copper mine strike Codelco Escondida Grasberg labor wage",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "copper macro Fed interest rate USD PMI China stimulus",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "prebaked anode price aluminum smelting petroleum coke trend",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "petroleum coke calcined price China refinery supply",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "coal tar pitch price China aluminium anode raw material",
+      "hl": "en-GB",
+      "gl": "GB"
+    },
+    {
+      "query": "aluminum smelter capacity Yunnan power curtailment restart",
+      "hl": "en-US",
+      "gl": "US"
+    },
+    {
+      "query": "铜价 今日 沪铜 LME 库存 升贴水",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "铜精矿 加工费 TC RC 冶炼 检修 2025",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "预焙阳极 价格 石油焦 煤沥青 铝厂 采购",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "电解铝 运行产能 云南 复产 限电 内蒙古",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "铜 下游 电网 新能源车 空调 消费",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "刚果金 铜矿 产量 出口 政策 税收",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "智利 秘鲁 铜矿 罢工 产量 Codelco",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "印度 铝 产能 预焙阳极 需求 中东",
+      "hl": "zh-CN",
+      "gl": "CN"
+    },
+    {
+      "query": "copper scrap secondary recycling green energy transition",
+      "hl": "en-US",
+      "gl": "US"
+    }
+  ],
+  "feeds": [
+    {
+      "url": "https://www.reuters.com/arc/outboundfeeds/v3/all/?outputType=xml",
+      "region": "GB",
+      "name": "Reuters"
+    },
+    {
+      "url": "https://www.mining.com/feed/",
+      "region": "US",
+      "name": "Mining.com"
+    },
+    {
+      "url": "https://news.metal.com/rss",
+      "region": "CN",
+      "name": "SMM"
+    }
+  ]
+}
