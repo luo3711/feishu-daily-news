@@ -18,4 +18,4 @@ jobs:
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_OPEN_ID: ${{ secrets.FEISHU_OPEN_ID }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: python pubilish_plus.py
+        run: python publish_plus.py
